@@ -1,14 +1,15 @@
 """
 FastAPI application entry point for BrandAI.
 """
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 
 from app.config import settings
 from app.api import health, routes
 from app.core.exceptions import BrandAIException
-from fastapi import Request
-from fastapi.responses import JSONResponse
+from app.services.logger import app_logger
 
 # Create FastAPI application
 app = FastAPI(
@@ -34,6 +35,45 @@ app.include_router(routes.router, tags=["Generation"], prefix="/api/v1")
 
 
 # Error handlers
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """Handle FastAPI validation errors."""
+    errors = exc.errors()
+    error_msg = f"Validation error: {errors}"
+    print(error_msg)  # Also print to stdout for Docker logs
+    app_logger.error(error_msg)
+    
+    # Log form data if available
+    try:
+        form = await request.form()
+        form_keys = list(form.keys())
+        print(f"Form data keys: {form_keys}")  # Print to stdout
+        app_logger.error(f"Form data keys: {form_keys}")
+        for key in form_keys:
+            if key in ['logo', 'product']:
+                file = form[key]
+                file_info = f"  {key}: {file.filename if hasattr(file, 'filename') else 'N/A'}"
+                print(file_info)
+                app_logger.error(file_info)
+            else:
+                value = form[key]
+                field_info = f"  {key}: {value[:100] if isinstance(value, str) and len(value) > 100 else value}"
+                print(field_info)
+                app_logger.error(field_info)
+    except Exception as e:
+        error_detail = f"Could not read form data: {e}"
+        print(error_detail)
+        app_logger.error(error_detail)
+    
+    return JSONResponse(
+        status_code=422,
+        content={
+            "error": "Validation error",
+            "detail": errors
+        }
+    )
+
+
 @app.exception_handler(BrandAIException)
 async def brandai_exception_handler(request: Request, exc: BrandAIException):
     """Handle BrandAI custom exceptions."""

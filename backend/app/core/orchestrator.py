@@ -14,6 +14,7 @@ from app.agents.generation_agent.agent import GenerationAgent
 from app.agents.critique_agent.agent import CritiqueAgent
 from app.agents.refinement_agent.agent import RefinementAgent, RefinementStrategy
 from app.core.run_manager import run_manager
+from app.models.run import RunStatus
 from app.services.storage_service import storage_service
 from app.services.logger import app_logger
 import json
@@ -81,16 +82,30 @@ def brand_kit_node(state: WorkflowState) -> WorkflowState:
         brand_kit_agent = BrandKitAgent()
         
         # Execute brand kit extraction
+        logo_path = state.get("logo_path")
+        product_path = state.get("product_path")
+        
+        # Convert string paths to Path objects if they exist
+        logo_path_obj = Path(logo_path) if logo_path else None
+        product_path_obj = Path(product_path) if product_path else None
+        
+        logger.info(f"Brand kit extraction - logo_path: {logo_path}, product_path: {product_path}")
+        if logo_path_obj:
+            logger.info(f"Logo path exists: {logo_path_obj.exists()}")
+        if product_path_obj:
+            logger.info(f"Product path exists: {product_path_obj.exists()}")
+        
         result = brand_kit_agent.execute(
-            logo_path=state.get("logo_path"),
-            product_path=state.get("product_path"),
-            website_url=state.get("brand_website_url"),
+            brand_logo_path=logo_path_obj,
+            product_image_path=product_path_obj,
+            brand_website_url=state.get("brand_website_url"),
             run_id=state['run_id']
         )
         
         if result.get("success"):
             brand_kit = result.get("data", {}).get("brand_kit", {})
             run_manager.complete_stage(state['run_id'], "brand_kit_extraction")
+            run_manager.update_status(state['run_id'], RunStatus.PROCESSING, progress=25.0, current_stage="brand_kit_extraction")
             
             return {
                 **state,
@@ -148,6 +163,7 @@ def generation_node(state: WorkflowState) -> WorkflowState:
             if variations:
                 generated_ad_path = variations[0].get("file_path")
                 run_manager.complete_stage(state['run_id'], "ad_generation")
+                run_manager.update_status(state['run_id'], RunStatus.PROCESSING, progress=50.0, current_stage="ad_generation")
                 
                 return {
                     **state,
@@ -237,6 +253,7 @@ def critique_node(state: WorkflowState) -> WorkflowState:
                 overall_score = critique_feedback["all_variations"][0].get("overall_score", 0.0)
             
             run_manager.complete_stage(state['run_id'], "critique")
+            run_manager.update_status(state['run_id'], RunStatus.PROCESSING, progress=75.0, current_stage="critique")
             
             return {
                 **state,
@@ -302,6 +319,7 @@ def refinement_node(state: WorkflowState) -> WorkflowState:
         success = result.get("success", False)
         
         run_manager.complete_stage(state['run_id'], "refinement")
+        run_manager.update_status(state['run_id'], RunStatus.PROCESSING, progress=90.0, current_stage="refinement")
         
         return {
             **state,
@@ -477,6 +495,9 @@ class WorkflowOrchestrator:
             "error_message": None
         }
         
+        # Initialize progress
+        run_manager.update_status(run_id, RunStatus.PROCESSING, progress=0.0, current_stage="initializing")
+        
         try:
             # Execute workflow
             self.logger.info(f"[Orchestrator] Starting workflow stream - Run ID: {run_id}")
@@ -575,6 +596,7 @@ class WorkflowOrchestrator:
             
             # Mark run as completed or failed
             if final_state["workflow_status"] == "completed":
+                run_manager.update_status(run_id, RunStatus.PROCESSING, progress=100.0, current_stage="completed")
                 run_manager.complete_run(run_id, success=True)
             else:
                 run_manager.fail_run(run_id, final_state.get("error_message", "Workflow failed"))

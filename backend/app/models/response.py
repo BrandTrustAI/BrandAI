@@ -63,6 +63,7 @@ class FinalResponse(BaseModel):
     status: RunStatus = Field(..., description="Final status")
     success: bool = Field(..., description="Whether generation was successful")
     critique_report: Optional[CritiqueReport] = Field(None, description="Critique report if available")
+    variations: Optional[List[Dict[str, Any]]] = Field(None, description="List of generated ad variations")
     error: Optional[str] = Field(None, description="Error message if generation failed")
     retry_count: int = Field(0, description="Number of retry attempts made")
     completed_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="Completion timestamp")
