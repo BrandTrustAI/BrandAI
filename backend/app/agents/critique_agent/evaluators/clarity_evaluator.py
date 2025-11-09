@@ -174,6 +174,9 @@ class ClarityEvaluator(BaseEvaluator):
             positive_count = sum(1 for kw in product_keywords if kw in raw_text)
             negative_count = sum(1 for kw in negative_keywords if kw in raw_text)
             
+            # Initialize suggestions
+            suggestions = []
+            
             if positive_count > negative_count and positive_count >= 2:
                 score = 0.8
                 feedback = "Product appears to be visible"
