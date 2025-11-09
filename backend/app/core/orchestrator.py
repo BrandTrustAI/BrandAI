@@ -14,7 +14,9 @@ from app.agents.generation_agent.agent import GenerationAgent
 from app.agents.critique_agent.agent import CritiqueAgent
 from app.agents.refinement_agent.agent import RefinementAgent, RefinementStrategy
 from app.core.run_manager import run_manager
+from app.services.storage_service import storage_service
 from app.services.logger import app_logger
+import json
 
 
 # ============================================================================
@@ -534,9 +536,46 @@ class WorkflowOrchestrator:
             
             final_state["final_result"] = final_result
             
-            # Update run manager
+            # Update run manager with final results
+            final_ad_path = final_result.get("generated_ad_path")
+            critique_report = final_result.get("critique_report")
+            
+            # Save critique report to disk if available
+            if critique_report:
+                try:
+                    # Convert to JSON string
+                    if isinstance(critique_report, dict):
+                        report_json = json.dumps(critique_report, indent=2, default=str)
+                    else:
+                        # If it's a Pydantic model, convert to dict first
+                        if hasattr(critique_report, 'model_dump'):
+                            report_dict = critique_report.model_dump()
+                        elif hasattr(critique_report, 'dict'):
+                            report_dict = critique_report.dict()
+                        else:
+                            report_dict = critique_report
+                        report_json = json.dumps(report_dict, indent=2, default=str)
+                    
+                    # Save to disk
+                    report_path = storage_service.save_report(
+                        report_content=report_json,
+                        run_id=run_id,
+                        report_type="critique"
+                    )
+                    self.logger.info(f"Critique report saved to: {report_path}")
+                except Exception as e:
+                    self.logger.error(f"Error saving critique report to disk: {e}")
+            
+            # Store in run manager (in-memory)
+            run_manager.update_run_data(
+                run_id=run_id,
+                final_ad_path=final_ad_path,
+                critique_results=critique_report if critique_report else None
+            )
+            
+            # Mark run as completed or failed
             if final_state["workflow_status"] == "completed":
-                run_manager.complete_run(run_id, final_result)
+                run_manager.complete_run(run_id, success=True)
             else:
                 run_manager.fail_run(run_id, final_state.get("error_message", "Workflow failed"))
             
