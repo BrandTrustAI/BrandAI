@@ -2,7 +2,7 @@
 Health check endpoints.
 """
 from fastapi import APIRouter
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict
 
 router = APIRouter()
@@ -16,7 +16,7 @@ async def health_check() -> Dict[str, str]:
     """
     return {
         "status": "healthy",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "service": "BrandAI API"
     }
 
@@ -31,7 +31,7 @@ async def detailed_health_check() -> Dict:
     
     return {
         "status": "healthy",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "service": "BrandAI API",
         "version": "1.0.0",
         "environment": settings.APP_ENV,

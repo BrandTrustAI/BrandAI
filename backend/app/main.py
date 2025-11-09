@@ -6,6 +6,9 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.api import health, routes
+from app.core.exceptions import BrandAIException
+from fastapi import Request
+from fastapi.responses import JSONResponse
 
 # Create FastAPI application
 app = FastAPI(
@@ -27,7 +30,32 @@ app.add_middleware(
 
 # Include routers
 app.include_router(health.router, tags=["Health"])
-app.include_router(routes.router, tags=["Generation"])
+app.include_router(routes.router, tags=["Generation"], prefix="/api/v1")
+
+
+# Error handlers
+@app.exception_handler(BrandAIException)
+async def brandai_exception_handler(request: Request, exc: BrandAIException):
+    """Handle BrandAI custom exceptions."""
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "error": exc.message,
+            "status_code": exc.status_code
+        }
+    )
+
+
+@app.exception_handler(Exception)
+async def general_exception_handler(request: Request, exc: Exception):
+    """Handle general exceptions."""
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": "Internal server error",
+            "detail": str(exc) if settings.APP_ENV == "development" else None
+        }
+    )
 
 
 @app.on_event("startup")
